@@ -1,0 +1,118 @@
+{
+    "meta": {
+        "bookTitle": "Alice's Adventures in Wonderland",
+        "author": "Lewis Carroll"
+    },
+    "nodes": [
+        {
+            "id": "alice",
+            "data": {
+                "label": "Alice",
+                "importance": 1.0,
+                "imageUrl": "/images/alice.png"
+            },
+            "type": "characterNode"
+        },
+        {
+            "id": "white_rabbit",
+            "data": {
+                "label": "White Rabbit",
+                "importance": 0.85,
+                "imageUrl": "/images/white_rabbit.png"
+            },
+            "type": "characterNode"
+        },
+        {
+            "id": "cheshire_cat",
+            "data": {
+                "label": "Cheshire Cat",
+                "importance": 0.7,
+                "imageUrl": "/images/cheshire_cat.png"
+            },
+            "type": "characterNode"
+        },
+        {
+            "id": "mad_hatter",
+            "data": {
+                "label": "Mad Hatter",
+                "importance": 0.75,
+                "imageUrl": "/images/mad_hatter.png"
+            },
+            "type": "characterNode"
+        },
+        {
+            "id": "queen_hearts",
+            "data": {
+                "label": "Queen of Hearts",
+                "importance": 0.9,
+                "imageUrl": "/images/queen_hearts.png"
+            },
+            "type": "characterNode"
+        }
+    ],
+    "edges": [
+        {
+            "id": "e-alice-rabbit",
+            "source": "alice",
+            "target": "white_rabbit",
+            "data": {
+                "sentiment": "positive",
+                "strength": 0.9
+            }
+        },
+        {
+            "id": "e-alice-queen",
+            "source": "alice",
+            "target": "queen_hearts",
+            "data": {
+                "sentiment": "negative",
+                "strength": 1.0
+            }
+        },
+        {
+            "id": "e-alice-cat",
+            "source": "alice",
+            "target": "cheshire_cat",
+            "data": {
+                "sentiment": "positive",
+                "strength": 0.6
+            }
+        },
+        {
+            "id": "e-alice-hatter",
+            "source": "alice",
+            "target": "mad_hatter",
+            "data": {
+                "sentiment": "positive",
+                "strength": 0.7
+            }
+        },
+        {
+            "id": "e-queen-rabbit",
+            "source": "queen_hearts",
+            "target": "white_rabbit",
+            "data": {
+                "sentiment": "negative",
+                "strength": 0.8
+            }
+        },
+        {
+            "id": "e-queen-hatter",
+            "source": "queen_hearts",
+            "target": "mad_hatter",
+            "data": {
+                "sentiment": "negative",
+                "strength": 0.7
+            }
+        },
+        {
+            "id": "e-cat-queen",
+            "source": "cheshire_cat",
+            "target": "queen_hearts",
+            "data": {
+                "sentiment": "negative",
+                "strength": 0.5
+            }
+        }
+    ]
+}
