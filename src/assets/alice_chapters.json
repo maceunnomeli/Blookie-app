@@ -1,0 +1,115 @@
+{
+  "meta": {
+    "bookTitle": "Alice's Adventures in Wonderland",
+    "author": "Lewis Carroll"
+  },
+  "characters": [
+    { "id": "alice", "name": "Alice", "importance": 1.0, "imageUrl": "/images/alice.png" },
+    { "id": "rabbit", "name": "White Rabbit", "importance": 0.8, "imageUrl": "/images/white_rabbit.png" },
+    { "id": "cat", "name": "Cheshire Cat", "importance": 0.7, "imageUrl": "/images/cheshire_cat.png" },
+    { "id": "hatter", "name": "Mad Hatter", "importance": 0.75, "imageUrl": "/images/mad_hatter.png" },
+    { "id": "queen", "name": "Queen of Hearts", "importance": 0.9, "imageUrl": "/images/queen_hearts.png" }
+  ],
+  
+  "chapters": [
+    {
+      "id": 1,
+      "title": "Chapter 1: Down the Rabbit-Hole",
+      "activeCharacters": ["alice", "rabbit"],
+      "edges": [
+        { "source": "alice", "target": "rabbit", "sentiment": "positive", "strength": 0.3 }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Chapter 2: The Pool of Tears",
+      "activeCharacters": ["alice", "rabbit"],
+      "edges": [
+        { "source": "alice", "target": "rabbit", "sentiment": "negative", "strength": 0.4 }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Chapter 3: A Caucus-Race and a Long Tale",
+      "activeCharacters": ["alice"],
+      "edges": []
+    },
+    {
+      "id": 4,
+      "title": "Chapter 4: The Rabbit Sends in a Little Bill",
+      "activeCharacters": ["alice", "rabbit"],
+      "edges": [
+        { "source": "rabbit", "target": "alice", "sentiment": "negative", "strength": 0.7 }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Chapter 5: Advice from a Caterpillar",
+      "activeCharacters": ["alice"],
+      "edges": []
+    },
+    {
+      "id": 6,
+      "title": "Chapter 6: Pig and Pepper",
+      "activeCharacters": ["alice", "cat", "rabbit"],
+      "edges": [
+        { "source": "alice", "target": "cat", "sentiment": "positive", "strength": 0.6 },
+        { "source": "rabbit", "target": "alice", "sentiment": "negative", "strength": 0.5 }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Chapter 7: A Mad Tea-Party",
+      "activeCharacters": ["alice", "hatter", "cat"],
+      "edges": [
+        { "source": "alice", "target": "hatter", "sentiment": "negative", "strength": 0.8 },
+        { "source": "cat", "target": "hatter", "sentiment": "neutral", "strength": 0.3 }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Chapter 8: The Queen's Croquet-Ground",
+      "activeCharacters": ["alice", "queen", "cat", "rabbit", "hatter"],
+      "edges": [
+        { "source": "alice", "target": "queen", "sentiment": "negative", "strength": 1.0 },
+        { "source": "alice", "target": "cat", "sentiment": "positive", "strength": 0.9 },
+        { "source": "queen", "target": "rabbit", "sentiment": "negative", "strength": 0.8 },
+        { "source": "queen", "target": "hatter", "sentiment": "negative", "strength": 0.9 }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Chapter 9: The Mock Turtle's Story",
+      "activeCharacters": ["alice", "queen", "cat"],
+      "edges": [
+        { "source": "alice", "target": "queen", "sentiment": "negative", "strength": 0.6 },
+        { "source": "cat", "target": "queen", "sentiment": "negative", "strength": 0.7 }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Chapter 10: The Lobster Quadrille",
+      "activeCharacters": ["alice"],
+      "edges": []
+    },
+    {
+      "id": 11,
+      "title": "Chapter 11: Who Stole the Tarts?",
+      "activeCharacters": ["alice", "queen", "hatter", "rabbit"],
+      "edges": [
+        { "source": "queen", "target": "hatter", "sentiment": "negative", "strength": 1.0 },
+        { "source": "rabbit", "target": "queen", "sentiment": "neutral", "strength": 0.9 },
+        { "source": "alice", "target": "hatter", "sentiment": "positive", "strength": 0.4 }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Chapter 12: Alice's Evidence",
+      "activeCharacters": ["alice", "queen", "rabbit"],
+      "edges": [
+        { "source": "alice", "target": "queen", "sentiment": "negative", "strength": 1.0 },
+        { "source": "alice", "target": "rabbit", "sentiment": "neutral", "strength": 0.5 }
+      ]
+    }
+  ]
+}

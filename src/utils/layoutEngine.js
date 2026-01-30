@@ -117,23 +117,36 @@ const styleEdges = (edges, nodes) => {
     });
 };
 
-export const processGraphData = (json) => {
-    const { nodes: rawNodes, edges: rawEdges } = json;
+// ... keep imports and helper functions ...
 
-    // Process Nodes
+export const processGraphData = (json) => {
+    // If it's the new chapter format, we extract the "Master List" of characters
+    const rawNodes = json.characters.map(char => ({
+        id: char.id,
+        data: {
+            label: char.name,
+            importance: char.importance,
+            imageUrl: char.imageUrl
+        }
+    }));
+
+    // Calculate layout for EVERYONE (so positions are stable)
     const formattedNodes = calculateLayout(rawNodes).map(node => ({
         ...node,
         position: node.position || { x: 0, y: 0 },
         data: {
             ...node.data,
-            // Calculate size and inject it for the component
             size: BASE_SIZE + (node.data.importance * SIZE_MULTIPLIER)
         },
         type: 'characterNode',
     }));
 
-    // Process Edges - Now creating edges AFTER nodes so we can use positions
-    const formattedEdges = styleEdges(rawEdges, formattedNodes);
-
-    return { nodes: formattedNodes, edges: formattedEdges };
+    return {
+        masterNodes: formattedNodes,
+        chapters: json.chapters // Pass chapters through
+    };
 };
+
+// ... keep styleEdges function ...
+// Make sure to export styleEdges so we can use it in App.jsx!
+export { styleEdges };
