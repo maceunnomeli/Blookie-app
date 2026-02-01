@@ -1,71 +1,84 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const CharacterNode = ({ data }) => {
-    // Default size if none is provided
-    const size = data.size || 150;
+const CharacterNode = ({ data, selected }) => {
+    // SIZE FIX: Even bigger base size (200px minimum)
+    const size = 200 + (data.importance || 0.5) * 80;
+    const isActive = data.style?.opacity !== 0.1;
 
     return (
         <div
-            className="relative flex items-center justify-center transition-transform hover:scale-105"
             style={{
-                width: size,
-                height: size,
-                borderRadius: '50%',
-                border: '4px solid white',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-                backgroundColor: '#e2e8f0',
-                overflow: 'visible', // Must be visible for handles to work properly
+                width: `${size}px`,
+                height: `${size}px`,
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s ease'
             }}
         >
-            {/* Background Image */}
-            {data.imageUrl && (
+            <Handle type="target" position={Position.Top} id="top" style={{ opacity: 0 }} />
+            <Handle type="source" position={Position.Bottom} id="bottom" style={{ opacity: 0 }} />
+            <Handle type="target" position={Position.Left} id="left" style={{ opacity: 0 }} />
+            <Handle type="source" position={Position.Right} id="right" style={{ opacity: 0 }} />
+
+            {/* IMAGE CIRCLE */}
+            <div
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    border: selected ? '8px solid #fbbf24' : '6px solid white',
+                    boxShadow: selected ? '0 0 60px rgba(251,191,36,0.8)' : '0 20px 40px rgba(0,0,0,0.6)',
+                    background: 'white',
+                    filter: !isActive ? 'grayscale(100%) blur(2px)' : 'none',
+                    opacity: !isActive ? 0.5 : 1,
+                    transition: 'all 0.3s ease'
+                }}
+            >
+                {data.imageUrl ? (
+                    <img
+                        src={data.imageUrl}
+                        alt={data.label}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', color: '#ccc' }}>?</div>
+                )}
+            </div>
+
+            {/* LABEL */}
+            {isActive && (
                 <div
-                    className="absolute inset-0 w-full h-full rounded-full"
                     style={{
-                        backgroundImage: `url(${data.imageUrl})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        opacity: 0.5,
-                        zIndex: 0,
-                        overflow: 'hidden'
-                    }}
-                />
-            )}
-
-            {/* --- THE UNIVERSAL HANDLES (8 Total) --- */}
-            {/* Top */}
-            <Handle type="target" position={Position.Top} id="top" className="opacity-0" />
-            <Handle type="source" position={Position.Top} id="top" className="opacity-0" />
-
-            {/* Bottom */}
-            <Handle type="target" position={Position.Bottom} id="bottom" className="opacity-0" />
-            <Handle type="source" position={Position.Bottom} id="bottom" className="opacity-0" />
-
-            {/* Left */}
-            <Handle type="target" position={Position.Left} id="left" className="opacity-0" />
-            <Handle type="source" position={Position.Left} id="left" className="opacity-0" />
-
-            {/* Right */}
-            <Handle type="target" position={Position.Right} id="right" className="opacity-0" />
-            <Handle type="source" position={Position.Right} id="right" className="opacity-0" />
-            {/* --------------------------------------- */}
-
-            {/* Character Name */}
-            <div className="relative z-10 px-2 text-center pointer-events-none">
-                <h1
-                    className="font-extrabold text-black"
-                    style={{
-                        fontSize: `${size / 7}px`, // Dynamic font size based on bubble size
-                        textShadow: '0 2px 4px rgba(255,255,255,0.8)',
-                        lineHeight: 1,
+                        position: 'absolute',
+                        bottom: '-40px',
+                        backgroundColor: 'black',
+                        padding: '12px 30px',
+                        borderRadius: '50px',
+                        border: '2px solid #333',
+                        zIndex: 100,
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 5px 20px rgba(0,0,0,0.9)'
                     }}
                 >
-                    {data.label}
-                </h1>
-            </div>
+                    <span style={{
+                        color: 'white',
+                        fontWeight: '900',
+                        fontSize: '28px', // Huge text
+                        textTransform: 'uppercase',
+                        fontFamily: 'sans-serif',
+                        letterSpacing: '1px'
+                    }}>
+                        {data.label}
+                    </span>
+                </div>
+            )}
         </div>
     );
 };
 
-export default CharacterNode;
+export default memo(CharacterNode);

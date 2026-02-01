@@ -1,24 +1,23 @@
 import { MarkerType } from 'reactflow';
 
 // Layout Configuration
-const ROW_HEIGHT = 400; // Increased to let graph breathe
-const OFFSET_X = 500;   // Increased to spread nodes out
+const ROW_HEIGHT = 600;
+const OFFSET_X = 700;
+const BASE_SIZE = 100;
+const SIZE_MULTIPLIER = 200;
 
-// Pre-calculate sizing constants
-const BASE_SIZE = 100; // Default base
-const SIZE_MULTIPLIER = 200; // Multiplier for importance
-
-/**
- * Calculates the pyramid layout positions for nodes based on rank.
- */
 const calculateLayout = (nodes) => {
-    // Sort by importance (descending) to determine rank
-    const sortedNodes = [...nodes].sort((a, b) => b.data.importance - a.data.importance);
+    if (!nodes || nodes.length === 0) return [];
 
-    // Assign ranks and positions
+    const sortedNodes = [...nodes].sort((a, b) => {
+        const impA = a.data?.importance || 0.5;
+        const impB = b.data?.importance || 0.5;
+        return impB - impA;
+    });
+
     let nodeIndex = 0;
     for (let level = 0; nodeIndex < sortedNodes.length; level++) {
-        const itemsForThisLevel = level + 1; // 1, 2, 3...
+        const itemsForThisLevel = level + 1;
         const rowNodes = [];
 
         for (let i = 0; i < itemsForThisLevel && nodeIndex < sortedNodes.length; i++) {
@@ -33,11 +32,9 @@ const calculateLayout = (nodes) => {
             if (level === 0) {
                 x = 0;
             } else if (level === 1) {
-                // Explicit Rule: Rank 2 (idx 0) -> -Offset, Rank 3 (idx 1) -> +Offset
                 if (idx === 0) x = -OFFSET_X;
                 else x = OFFSET_X;
             } else {
-                // Generalize for deeper levels: Center them
                 const rowWidth = (rowNodes.length - 1) * OFFSET_X;
                 const startX = -rowWidth / 2;
                 x = startX + (idx * OFFSET_X);
@@ -50,103 +47,102 @@ const calculateLayout = (nodes) => {
     return sortedNodes;
 };
 
-/**
- * Styles edges based on Rule 4 and Feature: Smart Anchors
- */
-const styleEdges = (edges, nodes) => {
+export const styleEdges = (edges, nodes) => {
+    if (!edges) return [];
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
 
     return edges.map(edge => {
-        const { sentiment, strength } = edge.data;
         const sourceNode = nodeMap.get(edge.source);
         const targetNode = nodeMap.get(edge.target);
 
-        // Default Fallback
+        if (!sourceNode || !targetNode) return { ...edge, hidden: true };
+
+        const sentiment = edge.data?.sentiment || 'neutral';
+        const strength = edge.data?.strength || 0.5;
+
+        // Smart Anchors logic
         let sourceHandle = 'bottom';
         let targetHandle = 'top';
 
-        if (sourceNode && targetNode) {
-            // Calculate distances
-            const sx = sourceNode.position.x;
-            const sy = sourceNode.position.y;
-            const tx = targetNode.position.x;
-            const ty = targetNode.position.y;
+        const sx = sourceNode.position.x;
+        const sy = sourceNode.position.y;
+        const tx = targetNode.position.x;
+        const ty = targetNode.position.y;
+        const dx = tx - sx;
+        const dy = ty - sy;
 
-            const dx = tx - sx;
-            const dy = ty - sy;
-
-            // --- NEW LOGIC: Determine dominant direction ---
-            if (Math.abs(dx) > Math.abs(dy)) {
-                // Horizontal relationship is stronger
-                if (dx > 0) {
-                    sourceHandle = 'right'; // Target is to the Right
-                    targetHandle = 'left';
-                } else {
-                    sourceHandle = 'left';  // Target is to the Left
-                    targetHandle = 'right';
-                }
-            } else {
-                // Vertical relationship is stronger
-                if (dy > 0) {
-                    sourceHandle = 'bottom'; // Target is Below
-                    targetHandle = 'top';
-                } else {
-                    sourceHandle = 'top';    // Target is Above
-                    targetHandle = 'bottom';
-                }
-            }
+        if (Math.abs(dx) > Math.abs(dy)) {
+            sourceHandle = dx > 0 ? 'right' : 'left';
+            targetHandle = dx > 0 ? 'left' : 'right';
+        } else {
+            sourceHandle = dy > 0 ? 'bottom' : 'top';
+            targetHandle = dy > 0 ? 'top' : 'bottom';
         }
 
-        // Visual Styling
-        const strokeColor = sentiment === 'positive' ? '#10b981' : '#dc2626';
-        // Exponential thickness: Weak=2px, Strong=22px
-        const lineWidth = 2 + Math.pow(strength || 0.5, 2) * 20;
+        const strokeColor = sentiment === 'positive' ? '#fbbf24' : '#ef4444'; // Gold or Red
+
+        // THICKNESS FIX: Base 4px + up to 12px based on strength
+        const lineWidth = 4 + (strength * 8);
 
         return {
             ...edge,
             sourceHandle,
             targetHandle,
-            type: 'default', // Keep curved bezier
+            type: 'default', // 'default' is a bezier curve
             style: {
                 stroke: strokeColor,
                 strokeWidth: lineWidth,
-                opacity: 0.9,
+                opacity: 0.8,
             },
             animated: false,
         };
     });
 };
 
-// ... keep imports and helper functions ...
-
 export const processGraphData = (json) => {
-    // If it's the new chapter format, we extract the "Master List" of characters
-    const rawNodes = json.characters.map(char => ({
-        id: char.id,
-        data: {
-            label: char.name,
-            importance: char.importance,
-            imageUrl: char.imageUrl
-        }
-    }));
+    if (!json) return { nodes: [], edges: [], chapters: [] };
 
-    // Calculate layout for EVERYONE (so positions are stable)
+    let rawNodes = [];
+    let isChapterData = false;
+
+    if (json.characters) {
+        isChapterData = true;
+        rawNodes = json.characters.map(char => ({
+            id: char.id,
+            data: {
+                label: char.name,
+                importance: char.importance || 0.5,
+                imageUrl: char.imageUrl
+            }
+        }));
+    } else if (json.nodes) {
+        rawNodes = json.nodes.map(n => ({
+            ...n,
+            data: n.data || { label: n.id, importance: 0.5 }
+        }));
+    }
+
     const formattedNodes = calculateLayout(rawNodes).map(node => ({
         ...node,
         position: node.position || { x: 0, y: 0 },
-        data: {
-            ...node.data,
-            size: BASE_SIZE + (node.data.importance * SIZE_MULTIPLIER)
-        },
+        data: { ...node.data },
         type: 'characterNode',
     }));
 
+    let formattedEdges = [];
+    if (!isChapterData && json.edges) {
+        const rawEdges = json.edges.map(e => ({
+            ...e,
+            id: e.id || `e-${e.source}-${e.target}`,
+            data: e.data || { sentiment: 'neutral', strength: 0.5 }
+        }));
+        formattedEdges = styleEdges(rawEdges, formattedNodes);
+    }
+
     return {
+        nodes: formattedNodes,
+        edges: formattedEdges,
         masterNodes: formattedNodes,
-        chapters: json.chapters // Pass chapters through
+        chapters: json.chapters || []
     };
 };
-
-// ... keep styleEdges function ...
-// Make sure to export styleEdges so we can use it in App.jsx!
-export { styleEdges };

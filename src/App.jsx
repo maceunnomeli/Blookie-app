@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactFlow, {
-  Background,
   Controls,
   useNodesState,
   useEdgesState,
@@ -8,9 +7,8 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-// Import BOTH datasets
-import rawData from './assets/alice_data.json';       // The "Summary" Data
-import chapterData from './assets/alice_chapters.json'; // The "Story" Data
+import rawData from './assets/alice_data.json';
+import chapterData from './assets/alice_chapters.json';
 
 import { processGraphData, styleEdges } from './utils/layoutEngine';
 import CharacterNode from './components/CharacterNode';
@@ -20,99 +18,144 @@ const nodeTypes = { characterNode: CharacterNode };
 function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
-  // STATE: Story vs Summary
-  const [viewMode, setViewMode] = useState('story'); // 'story' or 'summary'
+  const [viewMode, setViewMode] = useState('story');
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
+  const [sliderValue, setSliderValue] = useState(0);
   const [chapters, setChapters] = useState([]);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
 
-  // 1. Initial Load (Load Chapter Data into State)
   useEffect(() => {
-    const { chapters } = processGraphData(chapterData);
-    setChapters(chapters);
+    try {
+      const processed = processGraphData(chapterData);
+      if (processed && processed.chapters) {
+        setChapters(processed.chapters);
+        setNodes(processed.masterNodes);
+      }
+    } catch (err) { console.error(err); }
   }, []);
 
-  // 2. THE BRAIN: Decides what to show based on Mode
   useEffect(() => {
-    if (chapters.length === 0) return;
+    if (chapters.length === 0 && viewMode === 'story') return;
 
     if (viewMode === 'summary') {
-      // --- SUMMARY MODE LOGIC ---
-      // Load the "Raw Data" (Global Graph)
       const { nodes: summaryNodes, edges: summaryEdges } = processGraphData(rawData);
-
       setNodes(summaryNodes.map(node => ({
         ...node,
-        style: { ...node.style, opacity: 1, filter: 'none' } // Everyone is visible
+        style: { ...node.style, opacity: 1, filter: 'none', transition: 'transform 1s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease' }
       })));
       setEdges(summaryEdges);
-
     } else {
-      // --- STORY MODE LOGIC (The Slider) ---
       const currentChapter = chapters[currentChapterIndex];
-      const activeIDs = new Set(currentChapter.activeCharacters);
-      const { masterNodes } = processGraphData(chapterData); // Get stable positions
+      if (!currentChapter) return;
 
-      // Update Nodes (Ghost Mode)
-      setNodes(masterNodes.map(node => {
-        const isActive = activeIDs.has(node.id);
+      const activeIDs = new Set(currentChapter.activeCharacters);
+      const { masterNodes } = processGraphData(chapterData);
+
+      setNodes(masterNodes.map(idealNode => {
+        const isActive = activeIDs.has(idealNode.id);
         let opacity = isActive ? 1 : 0.1;
-        if (focusedNodeId && node.id !== focusedNodeId) opacity = 0.05; // Extra dim for focus
+        if (focusedNodeId && idealNode.id !== focusedNodeId) opacity = 0.05;
 
         return {
-          ...node,
+          ...idealNode,
           style: {
-            ...node.style,
+            ...idealNode.style,
             opacity,
-            filter: isActive ? 'none' : 'grayscale(100%)',
-            transition: 'all 0.5s ease',
+            filter: isActive ? 'none' : 'grayscale(100%) blur(4px)',
+            transition: 'transform 1s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease, filter 0.5s ease',
+            zIndex: isActive ? 10 : 0
           }
         };
       }));
 
-      // Update Edges (Chapter Specific)
       const chapterEdges = currentChapter.edges.map(e => ({
         ...e,
         id: `e-${e.source}-${e.target}-${currentChapterIndex}`,
         data: { sentiment: e.sentiment, strength: e.strength }
       }));
 
-      // Apply Styles & Focus Filter
       setNodes(currentNodes => {
         let styledEdges = styleEdges(chapterEdges, currentNodes);
-        if (focusedNodeId) {
-          styledEdges = styledEdges.filter(e => e.source === focusedNodeId || e.target === focusedNodeId);
-        }
+        if (focusedNodeId) styledEdges = styledEdges.filter(e => e.source === focusedNodeId || e.target === focusedNodeId);
         setEdges(styledEdges);
         return currentNodes;
       });
     }
   }, [viewMode, currentChapterIndex, chapters, focusedNodeId, setNodes, setEdges]);
 
-  // Handlers
-  const onNodeDoubleClick = useCallback((e, node) => {
-    e.stopPropagation();
-    setFocusedNodeId(node.id);
-  }, []);
+  const handleSliderChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setSliderValue(val);
+    const newIndex = Math.round(val);
+    if (newIndex !== currentChapterIndex) {
+      setViewMode('story');
+      setCurrentChapterIndex(newIndex);
+    }
+  };
 
+  const handleSummaryToggle = () => {
+    if (viewMode === 'story') {
+      setViewMode('summary');
+    } else {
+      setViewMode('story');
+      setSliderValue(currentChapterIndex);
+    }
+  };
+
+  const onNodeDragStart = useCallback((event, node) => {
+    setNodes((nds) => nds.map((n) => n.id === node.id ? { ...n, style: { ...n.style, transition: 'none' } } : n));
+  }, [setNodes]);
+
+  const onNodeDragStop = useCallback((event, node) => {
+    if (viewMode === 'summary') return;
+    setNodes((currentNodes) => {
+      const updatedNodes = currentNodes.map(n => n.id === node.id ? { ...n, position: node.position } : n);
+      const currentChapter = chapters[currentChapterIndex];
+      if (!currentChapter) return currentNodes;
+      const rawEdges = currentChapter.edges.map(e => ({
+        ...e,
+        id: `e-${e.source}-${e.target}-${currentChapterIndex}`,
+        data: { sentiment: e.sentiment, strength: e.strength }
+      }));
+      setEdges(styleEdges(rawEdges, updatedNodes));
+      return updatedNodes;
+    });
+  }, [chapters, currentChapterIndex, viewMode, setEdges, setNodes]);
+
+  const onNodeDoubleClick = useCallback((e, node) => { e.stopPropagation(); setFocusedNodeId(node.id); }, []);
   const onPaneClick = useCallback(() => setFocusedNodeId(null), []);
 
-  // Helper to calculate Bubble Position
-  const progressPercent = chapters.length > 1
-    ? (currentChapterIndex / (chapters.length - 1)) * 100
-    : 0;
+  const maxVal = Math.max(0, chapters.length - 1);
+  const progressPercent = maxVal > 0 ? (sliderValue / maxVal) * 100 : 0;
 
   return (
-    <div style={{ width: '100vw', height: '100vh', backgroundColor: '#0f172a' }}>
+    <div
+      style={{
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        position: 'relative',
+        background: 'radial-gradient(circle at center, #1e1b4b 0%, #0f172a 50%, #000000 100%)'
+      }}
+    >
 
-      {/* Header */}
-      <div className="absolute top-8 left-0 w-full text-center z-50 pointer-events-none" style={{ color: '#fff', textShadow: '0 4px 12px black' }}>
-        <h1 className="text-6xl mb-2 font-bold" style={{ fontFamily: '"Cinzel", serif' }}>
-          Alice in Wonderland
+      {/* HEADER */}
+      <div className="absolute top-0 left-0 w-full pt-6 pb-12 z-40 pointer-events-none flex flex-col items-center">
+        {/* TITLE FIX: nowrap prevents line breaking */}
+        <h1 style={{
+          fontFamily: 'serif',
+          fontSize: '3.5rem',
+          fontWeight: '900',
+          color: 'white',
+          letterSpacing: '0.1em',
+          textShadow: '0 0 20px rgba(255,255,255,0.5)',
+          textAlign: 'center',
+          whiteSpace: 'nowrap' // <--- THIS FORCES ONE LINE
+        }}>
+          ALICE IN WONDERLAND
         </h1>
-        <p className="text-2xl font-light text-yellow-400 mt-2" style={{ fontFamily: '"Playfair Display", serif' }}>
-          {viewMode === 'summary' ? "Full Story Summary" : (chapters[currentChapterIndex]?.title || "Loading...")}
+        <p style={{ color: '#fbbf24', fontSize: '1.2rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '5px' }}>
+          {viewMode === 'summary' ? "Full Visual Map" : (chapters[currentChapterIndex]?.title || "Loading...")}
         </p>
       </div>
 
@@ -123,70 +166,97 @@ function App() {
         onEdgesChange={onEdgesChange}
         onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={onPaneClick}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
         zoomOnDoubleClick={false}
         nodeTypes={nodeTypes}
         fitView
-        className="bg-slate-900"
+        // OVERLAP FIX: Increase padding to 0.5 (50%) to push nodes far away from UI
+        fitViewOptions={{ padding: 0.5 }}
+        proOptions={{ hideAttribution: true }}
+        style={{
+          zIndex: 10,
+          // Mask fades out content at top/bottom edges
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)'
+        }}
       >
-        <Background color="#1e293b" />
-        <Controls />
+        <Controls position="top-right" style={{ margin: '20px', borderRadius: '10px', overflow: 'hidden' }} />
 
-        {/* --- CONTROL PANEL --- */}
-        <Panel position="bottom-center" className="w-full flex justify-center pb-12 pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-6 p-6 rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl">
-
-            {/* 1. THE SLIDER CONTAINER */}
-            <div className={`relative w-[600px] h-12 flex items-center transition-opacity duration-300 ${viewMode === 'summary' ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-
-              {/* Track Line */}
-              <div className="absolute w-full h-3 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400"
-                  style={{ width: `${progressPercent}%` }}
+        <Panel position="bottom-center" style={{ width: '100%', display: 'flex', justifyContent: 'center', paddingBottom: '30px', pointerEvents: 'none' }}>
+          <div style={{
+            pointerEvents: 'auto',
+            width: '90%',
+            maxWidth: '800px',
+            background: 'rgba(15, 23, 42, 0.9)',
+            border: '1px solid #334155',
+            borderRadius: '20px',
+            padding: '20px 30px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '30px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+          }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase' }}>
+                <span>Start</span>
+                <span style={{ color: '#fbbf24' }}>Chapter {currentChapterIndex + 1}</span>
+                <span>End</span>
+              </div>
+              <div style={{ position: 'relative', width: '100%', height: '20px', display: 'flex', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', width: '100%', height: '8px', background: '#334155', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${progressPercent}%`, background: '#fbbf24' }} />
+                </div>
+                <div style={{
+                  position: 'absolute',
+                  left: `${progressPercent}%`,
+                  transform: 'translateX(-50%)',
+                  width: '24px',
+                  height: '24px',
+                  background: 'white',
+                  border: '4px solid #fbbf24',
+                  borderRadius: '50%',
+                  boxShadow: '0 0 10px rgba(0,0,0,0.5)',
+                  pointerEvents: 'none',
+                  zIndex: 10
+                }} />
+                <input
+                  type="range"
+                  min="0"
+                  max={maxVal}
+                  step="0.01"
+                  value={sliderValue}
+                  onChange={handleSliderChange}
+                  style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    opacity: 0,
+                    cursor: 'pointer',
+                    zIndex: 20
+                  }}
                 />
               </div>
-
-              {/* The "Bubble Knob" */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-12 h-12 bg-yellow-400 rounded-full shadow-[0_0_20px_rgba(250,204,21,0.6)] border-4 border-slate-900 z-20 flex items-center justify-center transition-all duration-100 ease-out"
-                style={{ left: `calc(${progressPercent}% - 24px)` }} // Center the 48px bubble
-              >
-                <span className="text-slate-900 font-bold text-lg font-mono">
-                  {currentChapterIndex + 1}
-                </span>
-              </div>
-
-              {/* Invisible Input for Interaction */}
-              <input
-                type="range"
-                min="0"
-                max={Math.max(0, chapters.length - 1)}
-                value={currentChapterIndex}
-                onChange={(e) => {
-                  setViewMode('story'); // Switch back to story if dragged
-                  setCurrentChapterIndex(parseInt(e.target.value));
-                }}
-                className="absolute w-full h-12 opacity-0 cursor-pointer z-30"
-              />
             </div>
-
-            {/* 2. THE SUMMARY BUTTON */}
             <button
-              onClick={() => setViewMode(viewMode === 'story' ? 'summary' : 'story')}
-              className={`
-                px-6 py-3 rounded-xl font-bold text-lg transition-all transform active:scale-95
-                ${viewMode === 'summary'
-                  ? 'bg-yellow-400 text-slate-900 shadow-[0_0_20px_rgba(250,204,21,0.5)] scale-105'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-600'}
-              `}
-              style={{ fontFamily: '"Cinzel", serif' }}
+              onClick={handleSummaryToggle}
+              style={{
+                padding: '12px 30px',
+                borderRadius: '12px',
+                fontWeight: 'bold',
+                fontSize: '14px',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                border: viewMode === 'summary' ? 'none' : '1px solid #475569',
+                background: viewMode === 'summary' ? '#fbbf24' : '#1e293b',
+                color: viewMode === 'summary' ? '#000' : '#cbd5e1',
+                boxShadow: viewMode === 'summary' ? '0 0 20px rgba(251,191,36,0.5)' : 'none'
+              }}
             >
-              {viewMode === 'summary' ? "Back to Story" : "Summary"}
+              {viewMode === 'summary' ? "Resume" : "Summary"}
             </button>
-
           </div>
         </Panel>
-
       </ReactFlow>
     </div>
   );
