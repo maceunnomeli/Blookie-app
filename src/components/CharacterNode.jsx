@@ -2,7 +2,6 @@ import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
 const CharacterNode = ({ data, selected }) => {
-    // SIZE FIX: Even bigger base size (200px minimum)
     const size = 200 + (data.importance || 0.5) * 80;
     const isActive = data.style?.opacity !== 0.1;
 
@@ -15,8 +14,7 @@ const CharacterNode = ({ data, selected }) => {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.3s ease'
+                justifyContent: 'center'
             }}
         >
             <Handle type="target" position={Position.Top} id="top" style={{ opacity: 0 }} />
@@ -24,7 +22,6 @@ const CharacterNode = ({ data, selected }) => {
             <Handle type="target" position={Position.Left} id="left" style={{ opacity: 0 }} />
             <Handle type="source" position={Position.Right} id="right" style={{ opacity: 0 }} />
 
-            {/* IMAGE CIRCLE */}
             <div
                 style={{
                     width: '100%',
@@ -36,7 +33,7 @@ const CharacterNode = ({ data, selected }) => {
                     background: 'white',
                     filter: !isActive ? 'grayscale(100%) blur(2px)' : 'none',
                     opacity: !isActive ? 0.5 : 1,
-                    transition: 'all 0.3s ease'
+                    transition: 'border 0.2s, box-shadow 0.2s, filter 0.5s'
                 }}
             >
                 {data.imageUrl ? (
@@ -50,7 +47,6 @@ const CharacterNode = ({ data, selected }) => {
                 )}
             </div>
 
-            {/* LABEL */}
             {isActive && (
                 <div
                     style={{
@@ -68,7 +64,7 @@ const CharacterNode = ({ data, selected }) => {
                     <span style={{
                         color: 'white',
                         fontWeight: '900',
-                        fontSize: '28px', // Huge text
+                        fontSize: '28px',
                         textTransform: 'uppercase',
                         fontFamily: 'sans-serif',
                         letterSpacing: '1px'

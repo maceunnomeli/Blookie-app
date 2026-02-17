@@ -1,10 +1,8 @@
 import { MarkerType } from 'reactflow';
 
-// Layout Configuration
-const ROW_HEIGHT = 600;
-const OFFSET_X = 700;
-const BASE_SIZE = 100;
-const SIZE_MULTIPLIER = 200;
+// CONFIG: Horizontal Layout
+const COLUMN_WIDTH = 800;
+const ROW_HEIGHT = 250;
 
 const calculateLayout = (nodes) => {
     if (!nodes || nodes.length === 0) return [];
@@ -15,38 +13,23 @@ const calculateLayout = (nodes) => {
         return impB - impA;
     });
 
-    let nodeIndex = 0;
-    for (let level = 0; nodeIndex < sortedNodes.length; level++) {
-        const itemsForThisLevel = level + 1;
-        const rowNodes = [];
+    // Alice at 0,0
+    sortedNodes[0].position = { x: 0, y: 0 };
 
-        for (let i = 0; i < itemsForThisLevel && nodeIndex < sortedNodes.length; i++) {
-            rowNodes.push(sortedNodes[nodeIndex]);
-            nodeIndex++;
-        }
+    for (let i = 1; i < sortedNodes.length; i++) {
+        const col = Math.ceil(i / 2);
+        const isTop = i % 2 !== 0;
 
-        rowNodes.forEach((node, idx) => {
-            const y = level * ROW_HEIGHT;
-            let x = 0;
+        const x = col * COLUMN_WIDTH;
+        const y = (isTop ? -ROW_HEIGHT : ROW_HEIGHT) + (Math.random() * 50 - 25);
 
-            if (level === 0) {
-                x = 0;
-            } else if (level === 1) {
-                if (idx === 0) x = -OFFSET_X;
-                else x = OFFSET_X;
-            } else {
-                const rowWidth = (rowNodes.length - 1) * OFFSET_X;
-                const startX = -rowWidth / 2;
-                x = startX + (idx * OFFSET_X);
-            }
-
-            node.position = { x, y };
-        });
+        sortedNodes[i].position = { x, y };
     }
 
     return sortedNodes;
 };
 
+// --- SMART EDGE STYLING (The Fix) ---
 export const styleEdges = (edges, nodes) => {
     if (!edges) return [];
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
@@ -60,39 +43,55 @@ export const styleEdges = (edges, nodes) => {
         const sentiment = edge.data?.sentiment || 'neutral';
         const strength = edge.data?.strength || 0.5;
 
-        // Smart Anchors logic
-        let sourceHandle = 'bottom';
-        let targetHandle = 'top';
-
+        // 1. Calculate positions to find Shortest Path
         const sx = sourceNode.position.x;
         const sy = sourceNode.position.y;
         const tx = targetNode.position.x;
         const ty = targetNode.position.y;
+
         const dx = tx - sx;
         const dy = ty - sy;
 
-        if (Math.abs(dx) > Math.abs(dy)) {
-            sourceHandle = dx > 0 ? 'right' : 'left';
-            targetHandle = dx > 0 ? 'left' : 'right';
+        // 2. "Smart Anchor" Logic
+        let sourceHandle = 'right';
+        let targetHandle = 'left';
+
+        // If vertical distance is greater than horizontal distance, switch to Vertical Mode
+        if (Math.abs(dy) > Math.abs(dx)) {
+            if (dy > 0) {
+                // Target is BELOW Source
+                sourceHandle = 'bottom';
+                targetHandle = 'top';
+            } else {
+                // Target is ABOVE Source
+                sourceHandle = 'top';
+                targetHandle = 'bottom';
+            }
         } else {
-            sourceHandle = dy > 0 ? 'bottom' : 'top';
-            targetHandle = dy > 0 ? 'top' : 'bottom';
+            // Horizontal Mode (Standard)
+            if (dx > 0) {
+                sourceHandle = 'right';
+                targetHandle = 'left';
+            } else {
+                // Rare case: Target is to the LEFT (backwards)
+                sourceHandle = 'left';
+                targetHandle = 'right';
+            }
         }
 
-        const strokeColor = sentiment === 'positive' ? '#fbbf24' : '#ef4444'; // Gold or Red
-
-        // THICKNESS FIX: Base 4px + up to 12px based on strength
-        const lineWidth = 4 + (strength * 8);
+        const isNegative = sentiment === 'negative';
+        const strokeColor = isNegative ? '#ef4444' : '#10b981';
+        const lineWidth = 3 + (strength * 15);
 
         return {
             ...edge,
             sourceHandle,
             targetHandle,
-            type: 'default', // 'default' is a bezier curve
+            type: 'default', // Bezier curve adapts to the handles
             style: {
                 stroke: strokeColor,
                 strokeWidth: lineWidth,
-                opacity: 0.8,
+                opacity: 0.9,
             },
             animated: false,
         };
