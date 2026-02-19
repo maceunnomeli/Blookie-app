@@ -1,141 +1,156 @@
 import { MarkerType } from 'reactflow';
 
-// CONFIG: Horizontal Layout
 const COLUMN_WIDTH = 800;
-const ROW_HEIGHT = 250;
+const ROW_HEIGHT = 200;
 
 const calculateLayout = (nodes) => {
     if (!nodes || nodes.length === 0) return [];
-
-    const sortedNodes = [...nodes].sort((a, b) => {
-        const impA = a.data?.importance || 0.5;
-        const impB = b.data?.importance || 0.5;
-        return impB - impA;
-    });
-
-    // Alice at 0,0
+    const sortedNodes = [...nodes].sort((a, b) => (b.data?.importance || 0.5) - (a.data?.importance || 0.5));
     sortedNodes[0].position = { x: 0, y: 0 };
-
     for (let i = 1; i < sortedNodes.length; i++) {
         const col = Math.ceil(i / 2);
         const isTop = i % 2 !== 0;
-
         const x = col * COLUMN_WIDTH;
-        const y = (isTop ? -ROW_HEIGHT : ROW_HEIGHT) + (Math.random() * 50 - 25);
-
+        const randomY = (Math.random() * 80) - 40;
+        const y = (isTop ? -ROW_HEIGHT : ROW_HEIGHT) + randomY;
         sortedNodes[i].position = { x, y };
     }
-
     return sortedNodes;
 };
 
-// --- SMART EDGE STYLING (The Fix) ---
-export const styleEdges = (edges, nodes) => {
+// --- LOGIC UPDATE: FRIENDSHIP MODE ---
+export const styleEdges = (edges, nodes, viewMode = 'story') => {
     if (!edges) return [];
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
 
     return edges.map(edge => {
         const sourceNode = nodeMap.get(edge.source);
         const targetNode = nodeMap.get(edge.target);
-
         if (!sourceNode || !targetNode) return { ...edge, hidden: true };
 
         const sentiment = edge.data?.sentiment || 'neutral';
         const strength = edge.data?.strength || 0.5;
 
-        // 1. Calculate positions to find Shortest Path
-        const sx = sourceNode.position.x;
-        const sy = sourceNode.position.y;
-        const tx = targetNode.position.x;
-        const ty = targetNode.position.y;
+        // Smart Anchors
+        const sx = sourceNode.position.x; const sy = sourceNode.position.y;
+        const tx = targetNode.position.x; const ty = targetNode.position.y;
+        const dx = tx - sx; const dy = ty - sy;
 
-        const dx = tx - sx;
-        const dy = ty - sy;
-
-        // 2. "Smart Anchor" Logic
-        let sourceHandle = 'right';
-        let targetHandle = 'left';
-
-        // If vertical distance is greater than horizontal distance, switch to Vertical Mode
+        let sourceHandle = 'right'; let targetHandle = 'left';
         if (Math.abs(dy) > Math.abs(dx)) {
-            if (dy > 0) {
-                // Target is BELOW Source
-                sourceHandle = 'bottom';
-                targetHandle = 'top';
-            } else {
-                // Target is ABOVE Source
-                sourceHandle = 'top';
-                targetHandle = 'bottom';
-            }
+            if (dy > 0) { sourceHandle = 'bottom'; targetHandle = 'top'; }
+            else { sourceHandle = 'top'; targetHandle = 'bottom'; }
         } else {
-            // Horizontal Mode (Standard)
-            if (dx > 0) {
-                sourceHandle = 'right';
-                targetHandle = 'left';
-            } else {
-                // Rare case: Target is to the LEFT (backwards)
-                sourceHandle = 'left';
-                targetHandle = 'right';
-            }
+            if (dx > 0) { sourceHandle = 'right'; targetHandle = 'left'; }
+            else { sourceHandle = 'left'; targetHandle = 'right'; }
         }
 
         const isNegative = sentiment === 'negative';
-        const strokeColor = isNegative ? '#ef4444' : '#10b981';
-        const lineWidth = 3 + (strength * 15);
 
+        // 1. NEGATIVE (Battle)
+        if (isNegative) {
+            if (viewMode === 'story') {
+                return {
+                    ...edge, sourceHandle, targetHandle,
+                    type: 'battleEdge', animated: false,
+                    style: { stroke: '#ef4444', strokeWidth: 0 }
+                };
+            } else {
+                return {
+                    ...edge, sourceHandle, targetHandle,
+                    type: 'default', animated: false,
+                    style: { stroke: '#ef4444', strokeWidth: 3 + (strength * 15), opacity: 0.9 }
+                };
+            }
+        }
+
+        // 2. POSITIVE (Friendship / Hug)
+        if (viewMode === 'story') {
+            return {
+                ...edge, sourceHandle, targetHandle,
+                // SWAPPED: Love -> Friendship
+                type: 'friendshipEdge',
+                animated: false,
+                style: { stroke: '#10b981', strokeWidth: 0 }
+            };
+        }
+
+        // 3. POSITIVE SUMMARY
         return {
-            ...edge,
-            sourceHandle,
-            targetHandle,
-            type: 'default', // Bezier curve adapts to the handles
+            ...edge, sourceHandle, targetHandle,
+            type: 'default',
             style: {
-                stroke: strokeColor,
-                strokeWidth: lineWidth,
-                opacity: 0.9,
+                stroke: '#10b981', strokeWidth: 3 + (strength * 15), opacity: 0.9,
+                strokeDasharray: '8,4'
             },
             animated: false,
         };
     });
 };
 
-export const processGraphData = (json) => {
+export const processGraphData = (json, currentChapterEdges = [], isSummary = false) => {
     if (!json) return { nodes: [], edges: [], chapters: [] };
 
     let rawNodes = [];
-    let isChapterData = false;
-
     if (json.characters) {
-        isChapterData = true;
         rawNodes = json.characters.map(char => ({
             id: char.id,
-            data: {
-                label: char.name,
-                importance: char.importance || 0.5,
-                imageUrl: char.imageUrl
-            }
+            data: { label: char.name, importance: char.importance || 0.5, imageUrl: char.imageUrl }
         }));
     } else if (json.nodes) {
-        rawNodes = json.nodes.map(n => ({
-            ...n,
-            data: n.data || { label: n.id, importance: 0.5 }
-        }));
+        rawNodes = json.nodes.map(n => ({ ...n, data: n.data || { label: n.id, importance: 0.5 } }));
     }
 
-    const formattedNodes = calculateLayout(rawNodes).map(node => ({
-        ...node,
-        position: node.position || { x: 0, y: 0 },
-        data: { ...node.data },
-        type: 'characterNode',
-    }));
+    const nodeMoods = {};
+    const connectionCounts = {};
+
+    currentChapterEdges.forEach(edge => {
+        if (!nodeMoods[edge.source]) nodeMoods[edge.source] = 0;
+        if (!nodeMoods[edge.target]) nodeMoods[edge.target] = 0;
+        if (!connectionCounts[edge.source]) connectionCounts[edge.source] = 0;
+        if (!connectionCounts[edge.target]) connectionCounts[edge.target] = 0;
+
+        connectionCounts[edge.source]++;
+        connectionCounts[edge.target]++;
+
+        const score = edge.sentiment === 'positive' ? 1 : (edge.sentiment === 'negative' ? -1 : 0);
+        nodeMoods[edge.source] += score;
+        nodeMoods[edge.target] += score;
+    });
+
+    const formattedNodes = calculateLayout(rawNodes).map(node => {
+        const connections = connectionCounts[node.id] || 0;
+        const moodScore = nodeMoods[node.id] || 0;
+        const isThinking = !isSummary && connections === 0;
+
+        let mood = 'neutral';
+        const characterId = node.id.toLowerCase();
+        if (moodScore > 0) {
+            mood = 'happy';
+        } else if (moodScore < 0) {
+            if (characterId.includes('queen') || characterId.includes('heart')) {
+                mood = 'angry';
+            } else {
+                mood = 'sad';
+            }
+        }
+
+        return {
+            ...node,
+            position: node.position || { x: 0, y: 0 },
+            data: { ...node.data, mood, isThinking },
+            type: 'characterNode',
+        };
+    });
 
     let formattedEdges = [];
-    if (!isChapterData && json.edges) {
+    if (json.edges) {
         const rawEdges = json.edges.map(e => ({
             ...e,
             id: e.id || `e-${e.source}-${e.target}`,
             data: e.data || { sentiment: 'neutral', strength: 0.5 }
         }));
-        formattedEdges = styleEdges(rawEdges, formattedNodes);
+        formattedEdges = styleEdges(rawEdges, formattedNodes, 'story');
     }
 
     return {

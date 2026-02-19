@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ReactFlow, {
   Controls,
   useNodesState,
@@ -12,20 +12,22 @@ import chapterData from './assets/alice_chapters.json';
 
 import { processGraphData, styleEdges } from './utils/layoutEngine';
 import CharacterNode from './components/CharacterNode';
+import BattleEdge from './components/BattleEdge';
+import FriendshipEdge from './components/FriendshipEdge';
 
 const nodeTypes = { characterNode: CharacterNode };
+const edgeTypes = {
+  battleEdge: BattleEdge,
+  friendshipEdge: FriendshipEdge
+};
 
 function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
   const [viewMode, setViewMode] = useState('story');
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
-
-  // PLAYBACK STATE
   const [sliderValue, setSliderValue] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false); // <--- NEW STATE
-
+  const [isPlaying, setIsPlaying] = useState(false);
   const [chapters, setChapters] = useState([]);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
 
@@ -34,35 +36,27 @@ function App() {
       const processed = processGraphData(chapterData);
       if (processed && processed.chapters) {
         setChapters(processed.chapters);
-        setNodes(processed.masterNodes);
       }
     } catch (err) { console.error(err); }
   }, []);
 
-  // --- PLAYBACK ENGINE ---
   useEffect(() => {
     let interval;
     if (isPlaying && viewMode === 'story') {
       interval = setInterval(() => {
         setSliderValue(prev => {
-          // SPEED CONTROL: Change 0.03 to make it faster/slower
-          const next = prev + 0.03;
-
-          // Stop if we reach the end
+          const next = prev + 0.015;
           if (next >= chapters.length - 1) {
             setIsPlaying(false);
             return chapters.length - 1;
           }
           return next;
         });
-      }, 50); // Updates 20 times a second for smooth animation
+      }, 50);
     }
     return () => clearInterval(interval);
   }, [isPlaying, viewMode, chapters.length]);
 
-  // --- SYNC ENGINE (Slider -> Chapter) ---
-  // This listens to the slider (whether moved by hand OR by auto-play)
-  // and updates the chapter when we cross a threshold.
   useEffect(() => {
     const newIndex = Math.round(sliderValue);
     if (newIndex !== currentChapterIndex && chapters.length > 0) {
@@ -70,59 +64,83 @@ function App() {
     }
   }, [sliderValue, chapters.length, currentChapterIndex]);
 
-  // --- GRAPH UPDATE LOGIC ---
   useEffect(() => {
     if (chapters.length === 0 && viewMode === 'story') return;
 
+    let targetNodes = [];
+    let targetEdges = [];
+
     if (viewMode === 'summary') {
-      const { nodes: summaryNodes, edges: summaryEdges } = processGraphData(rawData);
-      setNodes(summaryNodes.map(node => ({
+      const { nodes: summaryNodes, edges: summaryEdges } = processGraphData(rawData, [], true);
+      targetNodes = summaryNodes.map(node => ({
         ...node,
-        style: { ...node.style, opacity: 1, filter: 'none', transition: 'transform 1s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease' }
-      })));
-      setEdges(summaryEdges);
+        style: { ...node.style, opacity: 1, filter: 'none' }
+      }));
+      targetEdges = styleEdges(summaryEdges, targetNodes, 'summary');
     } else {
       const currentChapter = chapters[currentChapterIndex];
       if (!currentChapter) return;
 
-      const activeIDs = new Set(currentChapter.activeCharacters);
-      const { masterNodes } = processGraphData(chapterData);
+      // --- STRICT FILTER: ONLY CHARACTERS WITH EDGES ARE ACTIVE ---
+      // 1. Find everyone involved in a relationship this chapter
+      const activeInteractionIDs = new Set();
+      currentChapter.edges.forEach(e => {
+        activeInteractionIDs.add(e.source);
+        activeInteractionIDs.add(e.target);
+      });
+      // 2. Alice is always active (she is the protagonist)
+      activeInteractionIDs.add('Alice');
 
-      setNodes(masterNodes.map(idealNode => {
-        const isActive = activeIDs.has(idealNode.id);
+      const { masterNodes } = processGraphData(chapterData, currentChapter.edges, false);
+
+      targetNodes = masterNodes.map(idealNode => {
+        // Use our new strict Set instead of the raw chapter list
+        const isActive = activeInteractionIDs.has(idealNode.id);
+        const finalThinking = isActive ? idealNode.data.isThinking : false;
+
         let opacity = isActive ? 1 : 0.1;
-        if (focusedNodeId && idealNode.id !== focusedNodeId) opacity = 0.05;
+        let filter = isActive ? 'none' : 'grayscale(100%) blur(4px)';
+
+        if (focusedNodeId) {
+          if (idealNode.id === focusedNodeId) {
+            opacity = 1; filter = 'none'; idealNode.style = { ...idealNode.style, zIndex: 100 };
+          } else {
+            opacity = 0.05; filter = 'grayscale(100%) blur(6px)';
+          }
+        }
 
         return {
           ...idealNode,
+          data: { ...idealNode.data, isThinking: finalThinking },
           style: {
             ...idealNode.style,
             opacity,
-            filter: isActive ? 'none' : 'grayscale(100%) blur(4px)',
-            transition: 'transform 1s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease, filter 0.5s ease',
-            zIndex: isActive ? 10 : 0
+            filter,
+            transition: 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease, filter 0.3s ease',
+            zIndex: (isActive || idealNode.id === focusedNodeId) ? 10 : 0
           }
         };
-      }));
+      });
 
-      const chapterEdges = currentChapter.edges.map(e => ({
+      const rawEdges = currentChapter.edges.map(e => ({
         ...e,
         id: `e-${e.source}-${e.target}-${currentChapterIndex}`,
         data: { sentiment: e.sentiment, strength: e.strength }
       }));
 
-      setNodes(currentNodes => {
-        let styledEdges = styleEdges(chapterEdges, currentNodes);
-        if (focusedNodeId) styledEdges = styledEdges.filter(e => e.source === focusedNodeId || e.target === focusedNodeId);
-        setEdges(styledEdges);
-        return currentNodes;
-      });
+      targetEdges = styleEdges(rawEdges, targetNodes, 'story');
     }
+
+    if (focusedNodeId) {
+      targetEdges = targetEdges.filter(e => e.source === focusedNodeId || e.target === focusedNodeId);
+    }
+
+    setNodes(targetNodes);
+    setEdges(targetEdges);
+
   }, [viewMode, currentChapterIndex, chapters, focusedNodeId, setNodes, setEdges]);
 
-  // --- Handlers ---
   const handleSliderChange = (e) => {
-    // If user grabs slider, pause playback
     setIsPlaying(false);
     setViewMode('story');
     setSliderValue(parseFloat(e.target.value));
@@ -134,7 +152,6 @@ function App() {
       setSliderValue(0);
       setIsPlaying(true);
     } else {
-      // If at the end, restart
       if (sliderValue >= chapters.length - 1) {
         setSliderValue(0);
       }
@@ -152,8 +169,15 @@ function App() {
     }
   };
 
-  const onNodeDoubleClick = useCallback((e, node) => { e.stopPropagation(); setFocusedNodeId(node.id); }, []);
-  const onPaneClick = useCallback(() => setFocusedNodeId(null), []);
+  const onNodeDoubleClick = useCallback((e, node) => {
+    e.stopPropagation();
+    setIsPlaying(false);
+    setFocusedNodeId(node.id);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setFocusedNodeId(null);
+  }, []);
 
   const maxVal = Math.max(0, chapters.length - 1);
   const progressPercent = maxVal > 0 ? (sliderValue / maxVal) * 100 : 0;
@@ -179,6 +203,7 @@ function App() {
         onPaneClick={onPaneClick}
         zoomOnDoubleClick={false}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         proOptions={{ hideAttribution: true }}
@@ -193,7 +218,6 @@ function App() {
         <Panel position="bottom-center" style={{ width: '100%', display: 'flex', justifyContent: 'center', paddingBottom: '30px', pointerEvents: 'none' }}>
           <div style={{ pointerEvents: 'auto', width: '90%', maxWidth: '800px', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid #334155', borderRadius: '20px', padding: '20px 30px', display: 'flex', alignItems: 'center', gap: '30px', boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
 
-            {/* --- PLAY BUTTON --- */}
             <button
               onClick={togglePlay}
               style={{
@@ -213,15 +237,12 @@ function App() {
               onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
             >
               {isPlaying ? (
-                // Pause Icon
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="black"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
               ) : (
-                // Play Icon (Triangle)
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="black" style={{ marginLeft: '4px' }}><path d="M5 3l14 9-14 9V3z" /></svg>
               )}
             </button>
 
-            {/* SLIDER CONTAINER */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase' }}>
                 <span>Start</span>
@@ -237,7 +258,6 @@ function App() {
               </div>
             </div>
 
-            {/* SUMMARY BUTTON */}
             <button onClick={handleSummaryToggle} style={{ padding: '12px 30px', borderRadius: '12px', fontWeight: 'bold', fontSize: '14px', textTransform: 'uppercase', cursor: 'pointer', border: viewMode === 'summary' ? 'none' : '1px solid #475569', background: viewMode === 'summary' ? '#fbbf24' : '#1e293b', color: viewMode === 'summary' ? '#000' : '#cbd5e1', boxShadow: viewMode === 'summary' ? '0 0 20px rgba(251,191,36,0.5)' : 'none' }}>
               {viewMode === 'summary' ? "Resume" : "Summary"}
             </button>
