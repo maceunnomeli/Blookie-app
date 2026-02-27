@@ -30,7 +30,7 @@ const FriendshipEdge = ({
     <>
       <path
         id={id}
-        style={{ ...style, stroke: '#10b981', strokeWidth: 4, strokeDasharray: '8,4' }}
+        style={{ ...style, stroke: '#10b981', strokeWidth: 4 }}
         className="react-flow__edge-path"
         d={edgePath}
         markerEnd={markerEnd}

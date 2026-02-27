@@ -69,7 +69,6 @@ export const styleEdges = (edges, nodes, viewMode = 'story') => {
         }
 
         const strokeColor = isNegative ? '#ef4444' : '#10b981';
-        const strokeDasharray = isNegative ? '5,5' : '8,4';
         const strokeWidth = viewMode === 'story' ? 0 : (3 + strength * 15);
 
         return {
@@ -83,7 +82,6 @@ export const styleEdges = (edges, nodes, viewMode = 'story') => {
                 stroke: strokeColor,
                 strokeWidth: strokeWidth,
                 opacity: 0.9,
-                strokeDasharray: viewMode === 'story' ? 'none' : strokeDasharray
             }
         };
     });

@@ -25,7 +25,7 @@ const BattleEdge = ({
     <>
       <path
         id={id}
-        style={{ ...style, stroke: '#ef4444', strokeWidth: 4, strokeDasharray: '5,5' }}
+        style={{ ...style, stroke: '#ef4444', strokeWidth: 4 }}
         className="react-flow__edge-path"
         d={edgePath}
         markerEnd={markerEnd}
