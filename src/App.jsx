@@ -21,15 +21,72 @@ const edgeTypes = {
   friendshipEdge: FriendshipEdge
 };
 
+// --- EXPANDED CHAPTER DATA ---
+// Structured to hold both the badge keyword and the two-sentence narrative summary.
+const CHAPTER_DETAILS = [
+  {
+    theme: "Falling Down",
+    summary: "Alice follows a frantic White Rabbit down a hole and finds herself in a hall of locked doors. She shrinks after drinking a mysterious potion but leaves the key to the garden on a table out of reach."
+  },
+  {
+    theme: "Giant Tears",
+    summary: "After eating a magic cake, Alice grows to a massive size and weeps a pool of tears out of frustration. She shrinks again and is swept away in the salty water alongside a peculiar group of animals."
+  },
+  {
+    theme: "Dry Race",
+    summary: "The soaked animals hold a chaotic, rule-less Caucus Race to dry themselves off. Alice accidentally frightens the birds and mice away by talking fondly about her predatory cat, Dinah."
+  },
+  {
+    theme: "Trapped!",
+    summary: "The White Rabbit mistakes Alice for his housemaid and orders her to fetch his gloves and fan. She drinks another potion, grows too large for the room, and escapes only by eating pebbles that turn into cakes."
+  },
+  {
+    theme: "Mushroom Magic",
+    summary: "Alice encounters a haughty Caterpillar smoking a hookah on top of a large mushroom. He teaches her that eating from alternating sides of the mushroom will allow her to control her size at will."
+  },
+  {
+    theme: "Mad House",
+    summary: "Alice visits the chaotic house of the Duchess, where dishes are thrown and a crying baby transforms into a pig. Outside, the grinning Cheshire Cat directs her toward the March Hare's residence."
+  },
+  {
+    theme: "Tea Time",
+    summary: "Alice joins the Mad Hatter, March Hare, and Dormouse in a perpetual, nonsensical tea party. Frustrated by their unanswerable riddles and rudeness, she leaves and finally manages to enter the beautiful garden."
+  },
+  {
+    theme: "Croquet Chaos",
+    summary: "Alice meets the tyrannical Queen of Hearts and is forced into a bizarre croquet game using flamingos as mallets and hedgehogs as balls. The Queen constantly disrupts the game by ordering executions for the slightest offenses."
+  },
+  {
+    theme: "Sad Tales",
+    summary: "The Duchess attempts to find a moral in every single action while Alice meets the Gryphon. The Gryphon introduces her to the Mock Turtle, who continually sobs while recounting his school days in the sea."
+  },
+  {
+    theme: "Weird Dance",
+    summary: "The Mock Turtle and Gryphon demonstrate the Lobster Quadrille, a highly unusual and energetic dance. Their performance is abruptly interrupted by a shout announcing that a royal trial is beginning."
+  },
+  {
+    theme: "The Trial",
+    summary: "The Knave of Hearts is placed on trial for stealing the Queen's tarts. Alice watches the highly absurd legal proceedings and realizes she is rapidly beginning to grow back to her normal size."
+  },
+  {
+    theme: "Waking Up",
+    summary: "Alice is called as a witness and boldly refuses to be intimidated by the King and Queen's illogical rules. As the entire deck of card soldiers attacks her, she wakes up on the riverbank, realizing it was all a vivid dream."
+  }
+];
+
 function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [viewMode, setViewMode] = useState('story');
+  const [viewMode, setViewMode] = useState('summary');
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [sliderValue, setSliderValue] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [chapters, setChapters] = useState([]);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
+  const [activeAudioId, setActiveAudioId] = useState(null);
+
+  // --- NEW STATE: Controls the summary text overlay ---
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -61,6 +118,8 @@ function App() {
     const newIndex = Math.round(sliderValue);
     if (newIndex !== currentChapterIndex && chapters.length > 0) {
       setCurrentChapterIndex(newIndex);
+      // Auto-collapse the summary text when transitioning to a new chapter
+      setIsSummaryOpen(false);
     }
   }, [sliderValue, chapters.length, currentChapterIndex]);
 
@@ -72,8 +131,17 @@ function App() {
 
     if (viewMode === 'summary') {
       const { nodes: summaryNodes, edges: summaryEdges } = processGraphData(rawData, [], true);
+
       targetNodes = summaryNodes.map(node => ({
         ...node,
+        data: {
+          ...node.data,
+          mood: 'neutral',
+          isThinking: false,
+          activeAudioId: activeAudioId,
+          setActiveAudioId: setActiveAudioId,
+          isSummaryMode: true
+        },
         style: { ...node.style, opacity: 1, filter: 'none' }
       }));
       targetEdges = styleEdges(summaryEdges, targetNodes, 'summary');
@@ -81,21 +149,23 @@ function App() {
       const currentChapter = chapters[currentChapterIndex];
       if (!currentChapter) return;
 
-      // --- STRICT FILTER: ONLY CHARACTERS WITH EDGES ARE ACTIVE ---
-      // 1. Find everyone involved in a relationship this chapter
       const activeInteractionIDs = new Set();
       currentChapter.edges.forEach(e => {
         activeInteractionIDs.add(e.source);
         activeInteractionIDs.add(e.target);
       });
-      // 2. Alice is always active (she is the protagonist)
-      activeInteractionIDs.add('Alice');
 
       const { masterNodes } = processGraphData(chapterData, currentChapter.edges, false);
 
       targetNodes = masterNodes.map(idealNode => {
-        // Use our new strict Set instead of the raw chapter list
-        const isActive = activeInteractionIDs.has(idealNode.id);
+        let isActive = activeInteractionIDs.has(idealNode.id);
+
+        if (idealNode.id.toLowerCase().includes('alice')) {
+          if (currentChapter.activeCharacters && currentChapter.activeCharacters.includes(idealNode.id)) {
+            isActive = true;
+          }
+        }
+
         const finalThinking = isActive ? idealNode.data.isThinking : false;
 
         let opacity = isActive ? 1 : 0.1;
@@ -111,7 +181,13 @@ function App() {
 
         return {
           ...idealNode,
-          data: { ...idealNode.data, isThinking: finalThinking },
+          data: {
+            ...idealNode.data,
+            isThinking: finalThinking,
+            activeAudioId: activeAudioId,
+            setActiveAudioId: setActiveAudioId,
+            isSummaryMode: false
+          },
           style: {
             ...idealNode.style,
             opacity,
@@ -138,7 +214,7 @@ function App() {
     setNodes(targetNodes);
     setEdges(targetEdges);
 
-  }, [viewMode, currentChapterIndex, chapters, focusedNodeId, setNodes, setEdges]);
+  }, [viewMode, currentChapterIndex, chapters, focusedNodeId, activeAudioId, setNodes, setEdges]);
 
   const handleSliderChange = (e) => {
     setIsPlaying(false);
@@ -151,11 +227,13 @@ function App() {
       setViewMode('story');
       setSliderValue(0);
       setIsPlaying(true);
+      setActiveAudioId(null);
     } else {
       if (sliderValue >= chapters.length - 1) {
         setSliderValue(0);
       }
       setIsPlaying(!isPlaying);
+      setIsSummaryOpen(false); // Close text if user hits play
     }
   };
 
@@ -166,6 +244,7 @@ function App() {
     } else {
       setViewMode('story');
       setSliderValue(currentChapterIndex);
+      setActiveAudioId(null);
     }
   };
 
@@ -182,16 +261,78 @@ function App() {
   const maxVal = Math.max(0, chapters.length - 1);
   const progressPercent = maxVal > 0 ? (sliderValue / maxVal) * 100 : 0;
 
+  // Retrieve the current chapter's structured data safely
+  const currentChapterData = CHAPTER_DETAILS[currentChapterIndex] || { theme: "Continuing...", summary: "The story continues..." };
+
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: 'radial-gradient(circle at center, #1e1b4b 0%, #0f172a 50%, #000000 100%)' }}>
 
       <div className="absolute top-0 left-0 w-full pt-6 pb-12 z-40 pointer-events-none flex flex-col items-center">
-        <h1 style={{ fontFamily: 'serif', fontSize: '3.5rem', fontWeight: '900', color: 'white', letterSpacing: '0.15em', textShadow: '0 0 20px rgba(255,255,255,0.5)', textAlign: 'center', whiteSpace: 'nowrap' }}>
+        <h1 style={{ fontFamily: 'serif', fontSize: '3.5rem', fontWeight: '900', color: 'white', letterSpacing: '0.15em', textShadow: '0 0 20px rgba(255,255,255,0.5)', textAlign: 'center', whiteSpace: 'nowrap', marginBottom: '0' }}>
           ALICE IN WONDERLAND
         </h1>
         <p style={{ color: '#fbbf24', fontSize: '1.2rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '5px' }}>
           {viewMode === 'summary' ? "Full Visual Map" : (chapters[currentChapterIndex]?.title || "Loading...")}
         </p>
+
+        {/* INTERACTIVE BADGE & SUMMARY CONTAINER */}
+        {viewMode === 'story' && (
+          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
+            {/* Clickable Theme Badge */}
+            <button
+              onClick={() => setIsSummaryOpen(!isSummaryOpen)}
+              style={{
+                background: isSummaryOpen ? 'rgba(251, 191, 36, 0.25)' : 'rgba(251, 191, 36, 0.1)',
+                border: '1px solid rgba(251, 191, 36, 0.5)',
+                color: '#fbbf24',
+                padding: '6px 16px',
+                borderRadius: '20px',
+                fontSize: '0.9rem',
+                fontWeight: 'bold',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                boxShadow: isSummaryOpen ? '0 0 25px rgba(251,191,36,0.4)' : '0 0 15px rgba(251,191,36,0.2)',
+                backdropFilter: 'blur(4px)',
+                cursor: 'pointer',
+                pointerEvents: 'auto',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {currentChapterData.theme}
+              <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>
+                {isSummaryOpen ? '▲' : '▼'}
+              </span>
+            </button>
+
+            {/* Expandable Summary Overlay */}
+            <div style={{
+              marginTop: '15px',
+              maxWidth: '600px',
+              background: 'rgba(15, 23, 42, 0.85)',
+              border: '1px solid #334155',
+              borderRadius: '12px',
+              padding: '16px 24px',
+              color: '#cbd5e1',
+              fontSize: '1rem',
+              lineHeight: '1.6',
+              textAlign: 'center',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(8px)',
+              pointerEvents: 'auto',
+              // Smooth height transition
+              maxHeight: isSummaryOpen ? '200px' : '0px',
+              opacity: isSummaryOpen ? 1 : 0,
+              overflow: 'hidden',
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}>
+              {currentChapterData.summary}
+            </div>
+          </div>
+        )}
       </div>
 
       <ReactFlow

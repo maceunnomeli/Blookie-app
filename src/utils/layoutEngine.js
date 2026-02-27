@@ -1,24 +1,43 @@
 import { MarkerType } from 'reactflow';
 
-const COLUMN_WIDTH = 800;
-const ROW_HEIGHT = 200;
+// We tighten the horizontal gap slightly because the vertical spread is now much wider
+const COLUMN_WIDTH = 600;
 
 const calculateLayout = (nodes) => {
     if (!nodes || nodes.length === 0) return [];
+
     const sortedNodes = [...nodes].sort((a, b) => (b.data?.importance || 0.5) - (a.data?.importance || 0.5));
+
+    // Anchor Alice in the exact center
     sortedNodes[0].position = { x: 0, y: 0 };
+
     for (let i = 1; i < sortedNodes.length; i++) {
-        const col = Math.ceil(i / 2);
+        const x = i * COLUMN_WIDTH;
+
+        // 1. Alternate Top and Bottom
         const isTop = i % 2 !== 0;
-        const x = col * COLUMN_WIDTH;
-        const randomY = (Math.random() * 80) - 40;
-        const y = (isTop ? -ROW_HEIGHT : ROW_HEIGHT) + randomY;
+
+        // 2. Base minimum distance from the center line
+        const baseY = isTop ? -180 : 180;
+
+        // 3. Staggered Wave (0, 140, or 280) creates 3 distinct vertical "tiers"
+        const stagger = (i % 3) * 140;
+
+        // 4. Importance Push: Less important characters (closer to 0) get pushed further out
+        const importance = sortedNodes[i].data?.importance || 0.5;
+        const importancePush = (1 - importance) * 150;
+
+        // Calculate final organic Y position
+        const y = isTop
+            ? (baseY - stagger - importancePush)
+            : (baseY + stagger + importancePush);
+
         sortedNodes[i].position = { x, y };
     }
+
     return sortedNodes;
 };
 
-// --- LOGIC UPDATE: FRIENDSHIP MODE ---
 export const styleEdges = (edges, nodes, viewMode = 'story') => {
     if (!edges) return [];
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
@@ -31,59 +50,41 @@ export const styleEdges = (edges, nodes, viewMode = 'story') => {
         const sentiment = edge.data?.sentiment || 'neutral';
         const strength = edge.data?.strength || 0.5;
 
-        // Smart Anchors
-        const sx = sourceNode.position.x; const sy = sourceNode.position.y;
-        const tx = targetNode.position.x; const ty = targetNode.position.y;
-        const dx = tx - sx; const dy = ty - sy;
+        const sourceImp = sourceNode.data?.importance || 0.5;
+        const targetImp = targetNode.data?.importance || 0.5;
 
-        let sourceHandle = 'right'; let targetHandle = 'left';
-        if (Math.abs(dy) > Math.abs(dx)) {
-            if (dy > 0) { sourceHandle = 'bottom'; targetHandle = 'top'; }
-            else { sourceHandle = 'top'; targetHandle = 'bottom'; }
-        } else {
-            if (dx > 0) { sourceHandle = 'right'; targetHandle = 'left'; }
-            else { sourceHandle = 'left'; targetHandle = 'right'; }
+        let sourceHandle = 'right';
+        let targetHandle = 'left';
+
+        if (sourceNode.position.x > targetNode.position.x) {
+            sourceHandle = 'left';
+            targetHandle = 'right';
         }
 
         const isNegative = sentiment === 'negative';
 
-        // 1. NEGATIVE (Battle)
-        if (isNegative) {
-            if (viewMode === 'story') {
-                return {
-                    ...edge, sourceHandle, targetHandle,
-                    type: 'battleEdge', animated: false,
-                    style: { stroke: '#ef4444', strokeWidth: 0 }
-                };
-            } else {
-                return {
-                    ...edge, sourceHandle, targetHandle,
-                    type: 'default', animated: false,
-                    style: { stroke: '#ef4444', strokeWidth: 3 + (strength * 15), opacity: 0.9 }
-                };
-            }
-        }
-
-        // 2. POSITIVE (Friendship / Hug)
+        let type = 'default';
         if (viewMode === 'story') {
-            return {
-                ...edge, sourceHandle, targetHandle,
-                // SWAPPED: Love -> Friendship
-                type: 'friendshipEdge',
-                animated: false,
-                style: { stroke: '#10b981', strokeWidth: 0 }
-            };
+            type = isNegative ? 'battleEdge' : 'friendshipEdge';
         }
 
-        // 3. POSITIVE SUMMARY
+        const strokeColor = isNegative ? '#ef4444' : '#10b981';
+        const strokeDasharray = isNegative ? '5,5' : '8,4';
+        const strokeWidth = viewMode === 'story' ? 0 : (3 + strength * 15);
+
         return {
-            ...edge, sourceHandle, targetHandle,
-            type: 'default',
-            style: {
-                stroke: '#10b981', strokeWidth: 3 + (strength * 15), opacity: 0.9,
-                strokeDasharray: '8,4'
-            },
+            ...edge,
+            sourceHandle,
+            targetHandle,
+            type,
+            data: { ...edge.data, sourceImp, targetImp },
             animated: false,
+            style: {
+                stroke: strokeColor,
+                strokeWidth: strokeWidth,
+                opacity: 0.9,
+                strokeDasharray: viewMode === 'story' ? 'none' : strokeDasharray
+            }
         };
     });
 };
@@ -124,14 +125,17 @@ export const processGraphData = (json, currentChapterEdges = [], isSummary = fal
         const isThinking = !isSummary && connections === 0;
 
         let mood = 'neutral';
-        const characterId = node.id.toLowerCase();
-        if (moodScore > 0) {
-            mood = 'happy';
-        } else if (moodScore < 0) {
-            if (characterId.includes('queen') || characterId.includes('heart')) {
-                mood = 'angry';
-            } else {
-                mood = 'sad';
+
+        if (!isSummary) {
+            const characterId = node.id.toLowerCase();
+            if (moodScore > 0) {
+                mood = 'happy';
+            } else if (moodScore < 0) {
+                if (characterId.includes('queen') || characterId.includes('heart')) {
+                    mood = 'angry';
+                } else {
+                    mood = 'sad';
+                }
             }
         }
 
@@ -150,7 +154,7 @@ export const processGraphData = (json, currentChapterEdges = [], isSummary = fal
             id: e.id || `e-${e.source}-${e.target}`,
             data: e.data || { sentiment: 'neutral', strength: 0.5 }
         }));
-        formattedEdges = styleEdges(rawEdges, formattedNodes, 'story');
+        formattedEdges = styleEdges(rawEdges, formattedNodes, isSummary ? 'summary' : 'story');
     }
 
     return {
