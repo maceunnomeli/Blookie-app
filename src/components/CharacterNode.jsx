@@ -1,6 +1,22 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
 import { Handle, Position } from 'reactflow';
 
+// --- CHARACTER DESCRIPTIONS DICTIONARY ---
+const CHARACTER_DESCRIPTIONS = {
+    "alice": "A curious and imaginative girl who falls down a rabbit hole into a nonsensical world. She struggles to maintain her Victorian logic amidst the chaos.",
+    "white rabbit": "A perpetually tardy and nervous creature wearing a waistcoat. His frantic rushing initiates Alice's entire adventure.",
+    "queen": "The tyrannical, foul-tempered ruler of Wonderland. She attempts to solve every annoyance by screaming 'Off with their heads!'",
+    "mad hatter": "A quirky tea party host trapped permanently at tea time. He speaks in unanswerable riddles and constantly frustrates Alice.",
+    "cheshire cat": "A philosophical, grinning feline who can disappear at will. He acts as a confusing but somewhat helpful guide.",
+    "march hare": "The Mad Hatter's equally eccentric companion. He treats every day like an endless, chaotic tea party.",
+    "dormouse": "A very sleepy rodent who sits between the Hatter and Hare. He occasionally wakes up to tell nonsensical stories.",
+    "caterpillar": "A haughty, hookah-smoking insect who questions Alice's identity. He teaches her how to control her size using a magic mushroom.",
+    "duchess": "A highly un-maternal woman who violently nurses a baby that turns into a pig. She attempts to find a moral in absolutely everything.",
+    "gryphon": "A mythical creature serving the Queen. He introduces Alice to the Mock Turtle and the Lobster Quadrille.",
+    "mock turtle": "A deeply melancholic creature with the head of a calf and body of a turtle. He is always weeping over his school days.",
+    "knave": "A timid servant put on trial for his life. He is accused of the alleged theft of the Queen's tarts."
+};
+
 const CharacterNode = ({ id, data, selected }) => {
     const size = 100 + (data.importance || 0.5) * 300;
     const scaleRatio = size / 250;
@@ -13,26 +29,32 @@ const CharacterNode = ({ id, data, selected }) => {
     const isThisAudioPlaying = data.activeAudioId === id;
     const audioRef = useRef(null);
 
-    // --- THE BULLETPROOF AUDIO FIX ---
-    // Convert both ID and Label to lowercase for fuzzy matching
+    const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+
     const normalizedId = String(id).toLowerCase();
     const normalizedLabel = String(data.label || '').toLowerCase();
 
-    // Fuzzy check: if it says "alice" or "queen" anywhere in the ID or Label
     const isAlice = normalizedId.includes('alice') || normalizedLabel.includes('alice');
     const isQueen = normalizedId.includes('queen') || normalizedLabel.includes('queen');
 
     const hasAudio = isAlice || isQueen;
 
-    // Set the exact file name you verified
     let audioFileName = '';
     if (isAlice) audioFileName = 'alice.mp3';
     if (isQueen) audioFileName = 'queen_of_hearts.mp3';
 
-    // Removed the leading slash to prevent Vite routing bugs
     const audioFilePath = audioFileName;
 
-    // --- IMAGE SWAPPER ---
+    let characterDescription = "A curious inhabitant of Wonderland.";
+    const searchString = `${normalizedId} ${normalizedLabel}`.replace(/_/g, ' ');
+
+    for (const key in CHARACTER_DESCRIPTIONS) {
+        if (searchString.includes(key)) {
+            characterDescription = CHARACTER_DESCRIPTIONS[key];
+            break;
+        }
+    }
+
     const rawImage = data.imageUrl || '';
     const cleanImage = rawImage.replace(/_(happy|sad|angry)/i, '');
 
@@ -52,7 +74,6 @@ const CharacterNode = ({ id, data, selected }) => {
         setCurrentSrc(targetImage);
     }, [targetImage]);
 
-    // --- AUDIO LOGIC ---
     useEffect(() => {
         if (!audioRef.current) return;
 
@@ -63,6 +84,12 @@ const CharacterNode = ({ id, data, selected }) => {
             audioRef.current.currentTime = 0;
         }
     }, [isThisAudioPlaying]);
+
+    useEffect(() => {
+        if (!isSummaryMode) {
+            setIsDescriptionOpen(false);
+        }
+    }, [isSummaryMode]);
 
     const toggleAudio = (e) => {
         e.stopPropagation();
@@ -83,7 +110,6 @@ const CharacterNode = ({ id, data, selected }) => {
         }
     };
 
-    // --- VISUALS ---
     let borderColor = selected ? '#fbbf24' : 'white';
     let imageTransform = 'scale(1)';
 
@@ -120,7 +146,6 @@ const CharacterNode = ({ id, data, selected }) => {
             <Handle type="target" position={Position.Left} id="left" style={{ opacity: 0 }} />
             <Handle type="source" position={Position.Right} id="right" style={{ opacity: 0 }} />
 
-            {/* AUDIO ELEMENT */}
             {hasAudio && (
                 <audio
                     ref={audioRef}
@@ -129,7 +154,6 @@ const CharacterNode = ({ id, data, selected }) => {
                 />
             )}
 
-            {/* THOUGHT CLOUDS */}
             {isActive && isThinking && (
                 <div style={{
                     position: 'absolute',
@@ -156,7 +180,6 @@ const CharacterNode = ({ id, data, selected }) => {
                 </div>
             )}
 
-            {/* MAIN IMAGE WRAPPER */}
             <div
                 style={{
                     width: '100%',
@@ -171,7 +194,6 @@ const CharacterNode = ({ id, data, selected }) => {
                     transform: isThinking ? 'translateY(-10px)' : 'none'
                 }}
             >
-                {/* INNER IMAGE */}
                 <div style={{ width: '100%', height: '100%', borderRadius: borderRadius, overflow: 'hidden' }}>
                     {currentSrc ? (
                         <img
@@ -192,10 +214,10 @@ const CharacterNode = ({ id, data, selected }) => {
                     )}
                 </div>
 
-                {/* SPEAKER BUTTON */}
                 {isSummaryMode && hasAudio && (
                     <button
                         onClick={toggleAudio}
+                        className="nodrag"
                         style={{
                             position: 'absolute',
                             top: '12%',
@@ -222,31 +244,85 @@ const CharacterNode = ({ id, data, selected }) => {
                 )}
             </div>
 
-            {/* LABEL */}
+            {/* --- FIXED TYPOGRAPHY WRAPPER --- */}
             {isActive && (
                 <div
+                    className="nodrag"
                     style={{
                         position: 'absolute',
-                        bottom: isThinking ? `${-60 * scaleRatio}px` : `${-40 * scaleRatio}px`,
-                        backgroundColor: 'black',
-                        padding: `${12 * scaleRatio}px ${30 * scaleRatio}px`,
-                        borderRadius: '50px',
-                        border: '2px solid #333',
+                        bottom: isThinking ? '-60px' : '-40px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
                         zIndex: 100,
-                        whiteSpace: 'nowrap',
-                        boxShadow: '0 5px 20px rgba(0,0,0,0.9)'
+                        width: '600px' // <--- Widened to comfortably fit the 30px text
                     }}
                 >
-                    <span style={{
-                        color: 'white',
-                        fontWeight: '900',
-                        fontSize: `${24 * scaleRatio}px`,
-                        textTransform: 'uppercase',
-                        fontFamily: 'sans-serif',
-                        letterSpacing: '1px'
-                    }}>
-                        {data.label}
-                    </span>
+                    <div
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (isSummaryMode) setIsDescriptionOpen(!isDescriptionOpen);
+                        }}
+                        style={{
+                            backgroundColor: 'black',
+                            padding: '12px 24px',
+                            borderRadius: '50px',
+                            border: isSummaryMode && isDescriptionOpen ? '2px solid #fbbf24' : '2px solid #333',
+                            boxShadow: isSummaryMode && isDescriptionOpen ? '0 0 15px rgba(251,191,36,0.4)' : '0 5px 20px rgba(0,0,0,0.9)',
+                            cursor: isSummaryMode ? 'pointer' : 'default',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '10px',
+                            transition: 'all 0.2s ease',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <span style={{
+                            color: 'white',
+                            fontWeight: '900',
+                            fontSize: '35px',
+                            textTransform: 'uppercase',
+                            fontFamily: 'sans-serif',
+                            letterSpacing: '1px'
+                        }}>
+                            {data.label}
+                        </span>
+                        {isSummaryMode && (
+                            <span style={{
+                                color: '#fbbf24',
+                                fontSize: '24px',
+                                transition: 'transform 0.2s ease',
+                                transform: isDescriptionOpen ? 'rotate(180deg)' : 'rotate(0deg)'
+                            }}>
+                                ▼
+                            </span>
+                        )}
+                    </div>
+
+                    {/* DESCRIPTION OVERLAY */}
+                    {isSummaryMode && (
+                        <div style={{
+                            marginTop: '10px',
+                            background: 'rgba(15, 23, 42, 0.95)',
+                            border: '1px solid #334155',
+                            borderRadius: '12px',
+                            padding: isDescriptionOpen ? '26px 20px' : '0px 20px',
+                            color: '#cbd5e1',
+                            fontSize: '30px',
+                            lineHeight: '1.6',
+                            textAlign: 'center',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.8)',
+                            backdropFilter: 'blur(8px)',
+                            maxHeight: isDescriptionOpen ? '500px' : '0px', // <--- Increased height capacity
+                            opacity: isDescriptionOpen ? 1 : 0,
+                            overflow: 'hidden',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            pointerEvents: isDescriptionOpen ? 'auto' : 'none'
+                        }}>
+                            {characterDescription}
+                        </div>
+                    )}
                 </div>
             )}
         </div>
